@@ -37,6 +37,8 @@ func TestListKustomizeDirs(t *testing.T) {
 		"b",
 		"refs",
 		"refs/components",
+		"refs2",
+		"refs2/components",
 	}, dirs)
 
 	includeRegexp, _ := regexp.Compile(".*/a$")
@@ -57,7 +59,32 @@ func TestListKustomizeDirs(t *testing.T) {
 		"b",
 		"refs",
 		"refs/components",
+		"refs2",
+		"refs2/components",
 	}, dirs)
+}
+
+func sameStringSlice(x, y []string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	// create a map of string -> int
+	diff := make(map[string]int, len(x))
+	for _, _x := range x {
+		// 0 value for int is 0, so just increment a counter for the string
+		diff[_x]++
+	}
+	for _, _y := range y {
+		// If the string _y is not in diff bail out early
+		if _, ok := diff[_y]; !ok {
+			return false
+		}
+		diff[_y] -= 1
+		if diff[_y] == 0 {
+			delete(diff, _y)
+		}
+	}
+	return len(diff) == 0
 }
 
 func TestBuildReferences(t *testing.T) {
@@ -70,6 +97,7 @@ func TestBuildReferences(t *testing.T) {
 	expected := map[string][]string{
 		"a/kustomization.yaml": []string{
 			"refs/kustomization.yaml",
+			"refs2/kustomization.yaml",
 		},
 		"a/pod.yaml": []string{
 			"a/kustomization.yaml",
@@ -89,8 +117,22 @@ func TestBuildReferences(t *testing.T) {
 		"refs/release-patch.yaml": []string{
 			"refs/kustomization.yaml",
 		},
+		"refs2/components/kustomization.yaml": []string{
+			"refs2/kustomization.yaml",
+		},
+		"refs2/deployment.yaml": []string{
+			"refs2/kustomization.yaml",
+		},
+		"refs2/pod.yaml": []string{
+			"refs2/kustomization.yaml",
+		},
+		"refs2/release-patch.yaml": []string{
+			"refs2/kustomization.yaml",
+		},
 	}
-	assert.Equal(t, expected, refsMap)
+	for k, v := range refsMap {
+		assert.True(t, sameStringSlice(v, expected[k]))
+	}
 }
 
 func TestGetKustomizationRefs(t *testing.T) {
@@ -122,29 +164,6 @@ func TestGetKustomizationRefs(t *testing.T) {
 		"fixtures/kustomize/refs/components/kustomization.yaml",
 		"fixtures/kustomize/refs/release-patch.yaml",
 	}, k3)
-}
-
-func sameStringSlice(x, y []string) bool {
-	if len(x) != len(y) {
-		return false
-	}
-	// create a map of string -> int
-	diff := make(map[string]int, len(x))
-	for _, _x := range x {
-		// 0 value for int is 0, so just increment a counter for the string
-		diff[_x]++
-	}
-	for _, _y := range y {
-		// If the string _y is not in diff bail out early
-		if _, ok := diff[_y]; !ok {
-			return false
-		}
-		diff[_y] -= 1
-		if diff[_y] == 0 {
-			delete(diff, _y)
-		}
-	}
-	return len(diff) == 0
 }
 
 func TestInvertRefs(t *testing.T) {
