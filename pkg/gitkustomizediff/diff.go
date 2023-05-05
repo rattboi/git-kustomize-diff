@@ -56,7 +56,8 @@ func Diff(baseDirPath, targetDirPath string, opts DiffOpts) (*DiffMap, error) {
 	diffMap := NewDiffMap()
 	for kDir := range kDirs {
 		baseKDirPath := filepath.Join(baseDirPath, kDir)
-		if !utils.KustomizationExists(baseKDirPath) {
+		exists, _ := utils.KustomizationExists(baseKDirPath)
+		if !exists {
 			err := utils.MakeKustomizeDir(baseKDirPath)
 			if err != nil {
 				diffMap.Results[kDir] = &DiffError{err}
@@ -64,7 +65,8 @@ func Diff(baseDirPath, targetDirPath string, opts DiffOpts) (*DiffMap, error) {
 			}
 		}
 		targetKDirPath := filepath.Join(targetDirPath, kDir)
-		if !utils.KustomizationExists(targetKDirPath) {
+		exists, _ = utils.KustomizationExists(targetKDirPath)
+		if !exists {
 			err := utils.MakeKustomizeDir(targetKDirPath)
 			if err != nil {
 				diffMap.Results[kDir] = &DiffError{err}
