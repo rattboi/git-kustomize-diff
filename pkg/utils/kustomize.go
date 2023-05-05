@@ -19,11 +19,13 @@ package utils
 import (
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
 
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
 
 type ListKustomizeDirsOpts struct {
@@ -40,7 +42,8 @@ func ListKustomizeDirs(dirPath string, opts ListKustomizeDirsOpts) ([]string, er
 		if !d.IsDir() {
 			return nil
 		}
-		if !KustomizationExists(path) {
+		exists, _ := KustomizationExists(path)
+		if !exists {
 			return nil
 		}
 		included := true
@@ -73,8 +76,16 @@ func ListKustomizeDirs(dirPath string, opts ListKustomizeDirsOpts) ([]string, er
 	return targetFiles, nil
 }
 
-func KustomizationExists(path string) bool {
-	return Exists(filepath.Join(path, "kustomization.yaml")) || Exists(filepath.Join(path, "kustomization.yml"))
+func KustomizationExists(path string) (bool, string) {
+	exists1 := Exists(filepath.Join(path, "kustomization.yaml"))
+	if exists1 {
+		return true, "kustomization.yaml"
+	}
+	exists2 := Exists(filepath.Join(path, "kustomization.yml"))
+	if exists2 {
+		return true, "kustomization.yml"
+	}
+	return false, ""
 }
 
 func MakeKustomizeDir(dirPath string) error {
@@ -92,4 +103,102 @@ func MakeKustomizeDir(dirPath string) error {
 	}
 	defer f.Close()
 	return nil
+}
+
+type Kustomization struct {
+	Resources             []string `yaml:"resources"`
+	Components            []string `yaml:"components"`
+	PatchesStrategicMerge []string `yaml:"patchesStrategicMerge"`
+}
+
+func GetKustomizationRefs(basePath, path string) ([]string, error) {
+	exists, f := KustomizationExists(path)
+	if !exists {
+		return nil, fmt.Errorf("no kustomization file found: %v", path)
+	}
+
+	filename, _ := filepath.Abs(filepath.Join(path, f))
+	yamlFile, err := ioutil.ReadFile(filename)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var kustomization Kustomization
+
+	err = yaml.Unmarshal(yamlFile, &kustomization)
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make([]string, 0)
+
+	// get paths for simple resources
+	simpleResources := make([]string, 0)
+	simpleResources = append(simpleResources, kustomization.Resources...)
+	simpleResources = append(simpleResources, kustomization.Components...)
+	simpleResources = append(simpleResources, kustomization.PatchesStrategicMerge...)
+
+	for _, r := range simpleResources {
+		rel, err := filepath.Rel(basePath, filepath.Join(path, r))
+		if err != nil {
+			return nil, err
+		}
+		candidatePath := filepath.Join(path, r)
+		fileInfo, err := os.Stat(candidatePath)
+		if err != nil {
+			// file not found, just add as relative link anyways
+			// maybe remote resource..
+			refs = append(refs, rel)
+		} else {
+			if fileInfo.IsDir() {
+				exists, kustomizationFilename := KustomizationExists(candidatePath)
+				if !exists {
+					return nil, errors.New("No Kustomization found in dir")
+				}
+				kustomizationPath, err := filepath.Rel(basePath, filepath.Join(candidatePath, kustomizationFilename))
+				if err != nil {
+					return nil, err
+				}
+				refs = append(refs, kustomizationPath)
+			} else {
+				refs = append(refs, rel)
+			}
+		}
+	}
+
+	return refs, nil
+}
+
+func BuildRefs(dirPath string) (map[string][]string, error) {
+	refMap := make(map[string][]string)
+
+	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		exists, _ := KustomizationExists(path)
+		if !exists {
+			return nil
+		}
+		relPath, err := filepath.Rel(dirPath, path)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		absPath := filepath.Join(dirPath, relPath)
+		refs, err := GetKustomizationRefs(dirPath, absPath)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		refMap[relPath] = refs
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return refMap, nil
 }
