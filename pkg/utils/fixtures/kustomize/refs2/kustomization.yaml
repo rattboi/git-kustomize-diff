@@ -1,0 +1,12 @@
+namespace: some-namespace
+
+resources:
+- pod.yaml
+- deployment.yaml
+- ../a/
+
+components:
+- components
+
+patchesStrategicMerge:
+- release-patch.yaml

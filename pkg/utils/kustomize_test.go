@@ -68,20 +68,27 @@ func TestBuildReferences(t *testing.T) {
 		t.FailNow()
 	}
 	expected := map[string][]string{
-		"a": []string{
-			"a/pod.yaml",
+		"a/kustomization.yaml": []string{
+			"refs/kustomization.yaml",
 		},
-		"b": []string{
-			"b/pod.yaml",
-		},
-		"refs": []string{
-			"refs/pod.yaml",
-			"refs/deployment.yaml",
+		"a/pod.yaml": []string{
 			"a/kustomization.yaml",
-			"refs/components/kustomization.yaml",
-			"refs/release-patch.yaml",
 		},
-		"refs/components": []string{},
+		"b/pod.yaml": []string{
+			"b/kustomization.yaml",
+		},
+		"refs/components/kustomization.yaml": []string{
+			"refs/kustomization.yaml",
+		},
+		"refs/deployment.yaml": []string{
+			"refs/kustomization.yaml",
+		},
+		"refs/pod.yaml": []string{
+			"refs/kustomization.yaml",
+		},
+		"refs/release-patch.yaml": []string{
+			"refs/kustomization.yaml",
+		},
 	}
 	assert.Equal(t, expected, refsMap)
 }
@@ -115,4 +122,91 @@ func TestGetKustomizationRefs(t *testing.T) {
 		"fixtures/kustomize/refs/components/kustomization.yaml",
 		"fixtures/kustomize/refs/release-patch.yaml",
 	}, k3)
+}
+
+func sameStringSlice(x, y []string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	// create a map of string -> int
+	diff := make(map[string]int, len(x))
+	for _, _x := range x {
+		// 0 value for int is 0, so just increment a counter for the string
+		diff[_x]++
+	}
+	for _, _y := range y {
+		// If the string _y is not in diff bail out early
+		if _, ok := diff[_y]; !ok {
+			return false
+		}
+		diff[_y] -= 1
+		if diff[_y] == 0 {
+			delete(diff, _y)
+		}
+	}
+	return len(diff) == 0
+}
+
+func TestInvertRefs(t *testing.T) {
+	refs := InvertRefs(make(map[string][]string))
+
+	assert.Equal(t, map[string][]string{}, refs)
+
+	refs = InvertRefs(map[string][]string{
+		"a": []string{"elem1", "elem2"},
+		"b": []string{"elem1", "elem2"},
+		"c": []string{"elem3", "elem4"},
+		"d": []string{"elem3", "elem4"},
+		"e": []string{"elem1", "elem2", "elem3", "elem4"},
+		"f": []string{"elem1", "elem3"},
+		"g": []string{},
+	})
+
+	assert.True(t, sameStringSlice(refs["elem1"], []string{"a", "b", "e", "f"}))
+	assert.True(t, sameStringSlice(refs["elem2"], []string{"a", "b", "e"}))
+	assert.True(t, sameStringSlice(refs["elem3"], []string{"c", "d", "e", "f"}))
+	assert.True(t, sameStringSlice(refs["elem4"], []string{"c", "d", "e"}))
+}
+
+func TestFindParents(t *testing.T) {
+	wd, _ := os.Getwd()
+
+	basePath := filepath.Join(wd, "fixtures", "kustomize")
+
+	// test 1
+	changedFile := filepath.Join("a", "pod.yaml")
+
+	parents, err := FindParents(changedFile, basePath)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+
+	assert.True(t, sameStringSlice([]string{
+		"refs/kustomization.yaml",
+		"refs2/kustomization.yaml",
+	}, parents))
+
+	// test 2
+	changedFile = filepath.Join("refs", "pod.yaml")
+
+	parents, err = FindParents(changedFile, basePath)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+
+	assert.True(t, sameStringSlice([]string{
+		"refs/kustomization.yaml",
+	}, parents))
+
+	// test 3
+	changedFile = filepath.Join("b", "pod.yaml")
+
+	parents, err = FindParents(changedFile, basePath)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+
+	assert.True(t, sameStringSlice([]string{
+		"b/kustomization.yaml",
+	}, parents))
 }

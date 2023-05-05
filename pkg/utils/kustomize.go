@@ -180,7 +180,7 @@ func BuildRefs(dirPath string) (map[string][]string, error) {
 		if !d.IsDir() {
 			return nil
 		}
-		exists, _ := KustomizationExists(path)
+		exists, kustomizationPath := KustomizationExists(path)
 		if !exists {
 			return nil
 		}
@@ -194,11 +194,47 @@ func BuildRefs(dirPath string) (map[string][]string, error) {
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		refMap[relPath] = refs
+		refMap[filepath.Join(relPath, kustomizationPath)] = refs
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return refMap, nil
+	//fmt.Print(refMap)
+	refs := InvertRefs(refMap)
+	//fmt.Print(refs)
+	return refs, nil
+}
+
+func InvertRefs(refMap map[string][]string) map[string][]string {
+	invertedRefs := make(map[string][]string)
+
+	for k, v := range refMap {
+		for _, e := range v {
+			invertedRefs[e] = append(invertedRefs[e], k)
+		}
+	}
+
+	return invertedRefs
+}
+
+func FindParents(referrent, basePath string) ([]string, error) {
+	allRefs, err := BuildRefs(basePath)
+	//fmt.Printf("R: %v\n", referrent)
+
+	parents := make([]string, 0)
+
+	refs := allRefs[referrent]
+	//fmt.Printf("Refs: %v\n", refs)
+	if len(refs) == 0 {
+		return []string{referrent}, nil
+	} else {
+		for _, ref := range refs {
+			p, _ := FindParents(ref, basePath)
+			parents = append(parents, p...)
+		}
+	}
+	//fmt.Printf("P: %v\n", parents)
+
+	return parents, err
 }
