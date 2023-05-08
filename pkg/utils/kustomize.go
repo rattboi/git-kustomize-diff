@@ -220,21 +220,36 @@ func InvertRefs(refMap map[string][]string) map[string][]string {
 
 func FindParents(referrent, basePath string) ([]string, error) {
 	allRefs, err := BuildRefs(basePath)
-	//fmt.Printf("R: %v\n", referrent)
 
-	parents := make([]string, 0)
-
-	refs := allRefs[referrent]
-	//fmt.Printf("Refs: %v\n", refs)
-	if len(refs) == 0 {
-		return []string{referrent}, nil
-	} else {
-		for _, ref := range refs {
-			p, _ := FindParents(ref, basePath)
-			parents = append(parents, p...)
-		}
+	if err != nil {
+		return nil, err
 	}
-	//fmt.Printf("P: %v\n", parents)
 
-	return parents, err
+	// recursive portion of FindParents, in order to not need to rebuild the refs every call
+	var findParents func(referrent, basePath string, allRefs map[string][]string) []string
+	findParents = func(referrent, basePath string, allRefs map[string][]string) []string {
+		parents := make([]string, 0)
+
+		refs := allRefs[referrent]
+		if len(refs) == 0 {
+			return []string{referrent}
+		} else {
+			for _, ref := range refs {
+				p := findParents(ref, basePath, allRefs)
+				parents = append(parents, p...)
+			}
+		}
+
+		return parents
+	}
+
+	parents := findParents(referrent, basePath, allRefs)
+
+	// Strip off kustomization file from paths
+	var parentDirs []string
+	for _, p := range parents {
+		parentDirs = append(parentDirs, filepath.Dir(p))
+	}
+
+	return parentDirs, nil
 }

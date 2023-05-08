@@ -201,8 +201,8 @@ func TestFindParents(t *testing.T) {
 	}
 
 	assert.True(t, sameStringSlice([]string{
-		"refs/kustomization.yaml",
-		"refs2/kustomization.yaml",
+		"refs",
+		"refs2",
 	}, parents))
 
 	// test 2
@@ -214,7 +214,7 @@ func TestFindParents(t *testing.T) {
 	}
 
 	assert.True(t, sameStringSlice([]string{
-		"refs/kustomization.yaml",
+		"refs",
 	}, parents))
 
 	// test 3
@@ -226,6 +226,6 @@ func TestFindParents(t *testing.T) {
 	}
 
 	assert.True(t, sameStringSlice([]string{
-		"b/kustomization.yaml",
+		"b",
 	}, parents))
 }
